@@ -1,0 +1,26 @@
+"","X","Study","T.1","N.1","R.1","T.2","N.2","R.2","covar.pTBL","covar.tTBL","covar.Route","covar.Surg","combine"
+"1",1,"Hamedani_2021","Placebo_No_Treatment",40,5,"TXA",40,1,400,200,"Topical/Intra-articular","General Surgery",0
+"2",2,"Jafarbegloo_2022","Placebo_No_Treatment",25,0,"TXA",25,0,731.45,616.32,"Intravenous","Obstetrics",0
+"3",3,"Chaiyakarn_2023","Placebo_No_Treatment",30,13,"TXA",30,5,1192.25,766.75,"Intravenous","Obstetrics",0
+"4",4,"Pacheco_2023","Placebo_No_Treatment",5470,232,"TXA",5525,201,NA,NA,"Intravenous","Obstetrics",0
+"5",5,"Rodriguez-Garcia_2022","Placebo_No_Treatment",25,5,"TXA",25,0,NA,NA,"Missing","Plastic Surgery",0
+"6",6,"Mokhtari_2021","Placebo_No_Treatment",54,6,"TXA",54,1,NA,NA,"Combined","Urology",0
+"7",7,"Bansal_2016","Placebo_No_Treatment",200,25,"TXA",200,10,212.61,154.55,"Topical/Intra-articular","Urology",0
+"8",8,"Calgar_2008","Placebo_No_Treatment",50,10,"TXA",50,15,1047,804,"Intravenous","Gynecology",0
+"9",9,"Lundin_2014","Placebo_No_Treatment",50,22,"TXA",50,15,NA,NA,"Intravenous","Gynecology",0
+"10",10,"Kumar_2013","Placebo_No_Treatment",100,11,"TXA",100,2,NA,NA,"Oral","Urology",0
+"11",11,"Iskakov_2017","Placebo_No_Treatment",82,10,"TXA",82,2,NA,NA,"Intravenous","Urology",0
+"12",12,"Siddiq_2017","Placebo_No_Treatment",120,12,"TXA",120,4,NA,NA,"Intramuscular","Urology",0
+"13",13,"Rashid_2018","Placebo_No_Treatment",25,3,"TXA",25,1,117.24,73.8,"Intramuscular","Urology",0
+"14",14,"Mohammadi_2019","Placebo_No_Treatment",66,10,"TXA",64,8,NA,NA,"Combined","Urology",0
+"15",15,"Batagello_2021","Placebo_No_Treatment",96,10,"TXA",93,2,819.9,523.3,"Intravenous","Urology",0
+"16",16,"Shaaban_2016","Placebo_No_Treatment",66,23,"TXA",66,13,677,407,"Intravenous","Gynecology",0
+"17",17,"Topsoee_2016","Placebo_No_Treatment",167,7,"TXA",165,2,166,117,"Intravenous","Gynecology",0
+"18",18,"Nivedhana_2018","Placebo_No_Treatment",50,21,"TXA",50,6,540.22,360.16,"Intravenous","Gynecology",0
+"19",19,"Shady_2018","Placebo_No_Treatment",35,19,"TXA",70,13,1080,702.71,"Intravenous","Gynecology",1
+"20",20,"Sallam_2019","Placebo_No_Treatment",43,4,"TXA",86,3,601.19,398.545,"Intravenous","Gynecology",1
+"21",21,"Bhutani_2020","Placebo_No_Treatment",75,17,"TXA",75,35,489.07,539.93,"Intravenous","Gynecology",0
+"22",22,"Opoku-Anane_2020","Placebo_No_Treatment",30,4,"TXA",30,0,317,269,"Intravenous","Gynecology",0
+"23",23,"Ranström_1993","Placebo_No_Treatment",45,0,"TXA",44,0,NA,NA,"Topical/Intra-articular","Otolaryngology (ENT)",0
+"24",24,"Olaleye_2024","Placebo / No Treatment",29,16,"TXA",30,4,1007.1,474.8,"Topical/Intra-articular","Gynecology",0
+"25",25,"McDermott_2025","Placebo / No Treatment",16,0,"TXA",14,1,421.5,354.6,"Intravenous","Urology",0

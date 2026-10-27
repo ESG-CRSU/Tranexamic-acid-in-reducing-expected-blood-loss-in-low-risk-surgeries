@@ -1,0 +1,43 @@
+# Adapted from TSD 2 & 3
+
+# Normal likelihood, identity link
+# Random effects model
+
+
+# Data input is mean, SD & N
+
+model {
+  for (i in 1:ns) {
+    prec1[i] <- n1[i] / pow(sd1[i], 2)
+    prec2[i] <- n2[i] / pow(sd2[i], 2)
+
+    # observed arm means, given true means
+    mean1[i] ~ dnorm(mu[i], prec1[i])
+    mean2[i] ~ dnorm(m2[i], prec2[i])
+    m2[i] <- mu[i] + delta[i]
+
+    # effect (treatment - control) depends on TRUE baseline
+    delta[i] ~ dnorm(md[i], tau)
+    md[i] <- d + beta * (mu[i] - mx)
+
+    # exchangeable true baselines
+    mu[i] ~ dnorm(m, precmu)
+  }
+
+  m ~ dnorm(0, 1.0E-6)
+  sdmu ~ dunif(0, 5000)
+  precmu <- 1 / pow(sdmu, 2)
+
+  d ~ dnorm(0, 1.0E-6)
+  beta ~ dnorm(0, 1.0E-4)
+
+  # half-Cauchy prior on between-study SD, as in your file
+  U ~ dnorm(0, 0.16)
+  V ~ dgamma(0.5, 0.5)
+  sigma <- abs(U) / sqrt(V)
+  tau <- 1 / pow(sigma, 2)
+
+  # effect when true baseline = 0. If ~0, the effect is purely proportional
+  prop0 <- d - beta * mx
+}                                                                                                                
+

@@ -1,0 +1,292 @@
+---
+output:
+  pdf_document:
+    toc: true  # Adds the table of contents
+    toc_depth: 2  # Set the depth of headers to include in the TOC
+---
+
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+``` {r Data load, message = FALSE}
+
+# Low risk trials
+TBLData <- read.csv("LowRiskTBL2025.csv")
+library(metafor) # main package for analysis
+
+```
+
+
+
+``` {r Setup}
+
+#Row index of obstetrics trials
+obstetrics_index <- TBLData$covar.Surg == "Obstetrics"
+
+#Delete obstetrics trials
+bloodLossData <- TBLData[!obstetrics_index, ]
+
+#Row index of the trials that have complete blood loss data
+complete_index <- !is.na(bloodLossData$Mean.1) & !is.na(bloodLossData$Mean.2) &
+  !is.na(bloodLossData$SD.1) & !is.na(bloodLossData$SD.2) &
+  !is.na(bloodLossData$N.1) & !is.na(bloodLossData$N.2)
+
+#Delete rows without complete blood loss data
+bloodLossData <- bloodLossData[complete_index, ]
+
+#Effect size
+bloodLossData[, c("log_mean_ratio", "variance")] <- 
+  metafor::escalc(measure = "ROM",
+                  m1i = bloodLossData$Mean.2,
+                  m2i = bloodLossData$Mean.1,
+                  sd1i = bloodLossData$SD.2,
+                  sd2i = bloodLossData$SD.1,
+                  n1i = bloodLossData$N.2,
+                  n2i = bloodLossData$N.1)[c("yi", "vi")]
+
+# Only trials where control arm blood loss < 500ml
+
+# bloodLossData <- bloodLossData[bloodLossData$Mean.1 < 500,]
+
+```
+
+# Main analysis
+
+## Scatterplot
+
+``` {r Scatterplot}
+
+#Scatterplot of ratio of means in blood loss vs blood loss in placebo arm
+y_axis_marks <- seq(from = -0.8, to = 0.2, by = 0.2)
+plot(x = bloodLossData$Mean.1,
+     y = bloodLossData$log_mean_ratio,
+     xlab = "Blood loss in placebo arm (ml)",
+     xlim = c(0, 1200),
+     ylab = "Ratio of means in blood loss (ml)",
+     ylim = c(-0.8, 0.2),
+     main = "Ratio of means in blood loss vs blood loss in placebo arm",
+     yaxt = "n")
+axis(side = 2, at = y_axis_marks, labels = round(exp(y_axis_marks), digits = 1))
+abline(h = 0, lty = 2)
+```
+
+
+## Model results
+
+```{r Models}
+
+#Fixed effects
+fixedTBL <- metafor::rma(yi = log_mean_ratio, vi = variance, data = bloodLossData, method = "FE")
+paste("Fixed effects model results")
+summary(fixedTBL)
+
+#Random effects
+randomTBL <- metafor::rma(yi = log_mean_ratio, vi = variance, data = bloodLossData)
+paste("Random effects model results")
+summary(randomTBL)
+```
+
+
+## Forest plot
+
+``` {r Forest plot, fig.height = 10, fig.width = 8}
+
+bloodLossData$Mean.1 <- round(bloodLossData$Mean.1, digits = 1)
+bloodLossData$Mean.2 <- round(bloodLossData$Mean.2, digits = 1)
+bloodLossData$SD.1 <- round(bloodLossData$SD.1, digits = 1)
+bloodLossData$SD.2 <- round(bloodLossData$SD.2, digits = 1)
+
+n_trials <- length(bloodLossData$Study)
+
+forest(randomTBL,
+       slab = paste(bloodLossData$Study),
+       xlim = c(-7, 3),
+       ylim = c(-3, n_trials + 3),
+       ilab = cbind(bloodLossData$Mean.2,
+                    bloodLossData$SD.2,
+                    bloodLossData$N.2,
+                    bloodLossData$Mean.1,
+                    bloodLossData$SD.1,
+                    bloodLossData$N.1),
+       ilab.xpos = seq(-5, -2.5, length.out = 6),
+       atransf = exp,
+       addpred = TRUE,
+       header = FALSE,
+       cex = 0.8,
+       width = 10,
+       main = "Forest Plot of Total Blood Loss Meta-Analysis")
+text(x = seq(-5, -2.5, length.out = 6), y = n_trials + 1.6,
+     labels = c("Mean", "SD", "N", "Mean", "SD", "N"), cex = 0.8)
+text(x = seq(-5, -2.5, length.out = 6)[c(2, 5)], y = n_trials + 2.5,
+     labels = c("Treatment", "Control"), cex = 0.8)
+text(x = -7, y = n_trials + 1.6,
+     labels = "Study ID", pos = 4, cex = 0.8)
+text(x = 3, y = n_trials + 1.6,
+     labels = "Ratio of means [95% CI]", pos = 2, cex = 0.8)
+addpoly.rma(fixedTBL, atransf = exp, addpred=TRUE)
+
+```
+
+
+## Funnel plots
+
+``` {r}
+
+# SurgeryCode
+
+SurgCode <- bloodLossData$covar.Surg
+SurgCode[SurgCode == "Otolaryngology (ENT)"] = 1
+SurgCode[SurgCode == "Gynecology"] = 2
+SurgCode[SurgCode == "Orthopaedics"] = 3
+SurgCode[SurgCode == "Urology"] = 4
+SurgCode[SurgCode == "Oral & Maxillofacial"] = 5
+SurgCode[SurgCode == "Plastic Surgery"] = 6
+SurgCode <- as.numeric(SurgCode)
+
+# Funnel plots with and without covariate
+
+FunnelTBL <- funnel(randomTBL, level=c(90, 95, 99), shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                      main = "Funnel Plot: Total Blood Loss Meta-Analysis \n (by Surgery)", refline = 0)
+legend("topright", legend = unique(bloodLossData$covar.Surg), pch = seq(1,6))
+
+
+# Route of administration code
+
+bloodLossData$covar.Route[is.na(bloodLossData$covar.Route)] <- "Missing"
+
+RouteCode <- bloodLossData$covar.Route
+RouteCode[RouteCode == "Combined"] = 3
+RouteCode[RouteCode == "Intramuscular"] = 4
+RouteCode[RouteCode == "Oral"] = 5
+RouteCode[RouteCode == "Topical/Intra-articular"] = 2
+RouteCode[RouteCode == "Intravenous"] = 1
+RouteCode[RouteCode == "Missing"] = 6
+RouteCode <- as.numeric(RouteCode)
+
+FunnelTBL <- funnel(randomTBL, level=c(90, 95, 99), shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                      main = "Funnel Plot: Total Blood Loss Meta-Analysis \n (by Route of Administration)", refline = 0)
+legend("topright", legend = unique(bloodLossData$covar.Route), pch = seq(1,6))
+
+
+```
+
+
+# Subgroup analysis by type of surgery
+
+## Model results
+
+``` {r}
+
+# Just using low risk trials
+
+#The types of surgery
+surgery_types <- sort(unique(bloodLossData$covar.Surg))
+
+#Random effects MR
+random_tbl_surg <- metafor::rma(yi = log_mean_ratio, vi = variance, mods = ~ covar.Surg, data = bloodLossData)
+summary(random_tbl_surg)
+
+#Matrix used to get the fitted values by surgery type
+surgery_types_matrix <- rbind(rep(0, times = length(surgery_types) - 1), diag(1, nrow = length(surgery_types) - 1))
+rownames(surgery_types_matrix) <- surgery_types
+
+#Fitted values by surgery type
+fitted_tbl_surg <- predict(random_tbl_surg, newmods = surgery_types_matrix, addx = TRUE)
+```
+
+
+## Subgroup plot
+
+``` {r}
+
+#Increase the left margin to allow the type of surgery labels to fit
+par(mar = c(5.1, 12, 4.1, 2.1))
+#Set up the plot area
+plot(NA, NA, xlim = c(-1.2, 0.3), ylim = c(0.5, length(surgery_types) + 0.5),
+     xlab = "Mean & 95% Confidence / Prediction Interval", xaxt = "n",
+     ylab = "", yaxt = "n",
+     main = "Ratio of means of blood loss\nby type of surgery")
+#Add mean and CI for each type of surgery
+for (surg in surgery_types) {
+  lines(x = c(fitted_tbl_surg$pi.lb[fitted_tbl_surg$slab == surg],
+              fitted_tbl_surg$pi.ub[fitted_tbl_surg$slab == surg]),
+        y = rep(which(surg == surgery_types), times = 2), lty="dashed")
+  lines(x = c(fitted_tbl_surg$ci.lb[fitted_tbl_surg$slab == surg],
+              fitted_tbl_surg$ci.ub[fitted_tbl_surg$slab == surg]),
+        y = rep(which(surg == surgery_types), times = 2), lwd=2)
+  points(x = fitted_tbl_surg$pred[fitted_tbl_surg$slab == surg],
+         y = which(surg == surgery_types),
+         pch = 16)
+}
+#x-axis
+x_ticks <- c(-1.2, -0.9, -0.6, -0.3, 0, 0.3)
+axis(side = 1, at = x_ticks, labels = signif(exp(x_ticks), digits = 2))
+#y-axis
+axis(side = 2, at = 1:length(surgery_types), labels = surgery_types, las = 1)
+#Reset the margins to default
+par(mar = c(5.1, 4.1, 4.1, 2.1))
+
+```
+
+
+
+# Subgroup analysis by route of administration
+
+## Model results
+
+``` {r}
+
+# Just using low risk trials
+
+#The types of surgery
+routes <- sort(unique(bloodLossData$covar.Route))
+
+#Random effects MR
+random_tbl_route <- metafor::rma(yi = log_mean_ratio, vi = variance, mods = ~ covar.Route, data = bloodLossData)
+summary(random_tbl_route)
+
+#Matrix used to get the fitted values by surgery type
+routes_matrix <- rbind(rep(0, times = length(routes) - 1), diag(1, nrow = length(routes) - 1))
+rownames(routes_matrix) <- routes
+
+#Fitted values by surgery type
+fitted_tbl_route <- predict(random_tbl_route, newmods = routes_matrix, addx = TRUE)
+```
+
+
+## Subgroup plot
+
+``` {r}
+
+#Increase the left margin to allow the route of administration labels to fit
+par(mar = c(5.1, 12, 4.1, 2.1))
+#Set up the plot area
+plot(NA, NA, xlim = c(-1.2, 0.3), ylim = c(0.5, length(routes) + 0.5),
+     xlab = "Mean & 95% Confidence / Prediction Interval", xaxt = "n",
+     ylab = "", yaxt = "n",
+     main = "Ratio of means of blood loss\nby route of administration")
+#Add mean and CI for each type of surgery
+for (surg in routes) {
+  lines(x = c(fitted_tbl_route$pi.lb[fitted_tbl_route$slab == surg],
+              fitted_tbl_route$pi.ub[fitted_tbl_route$slab == surg]),
+        y = rep(which(surg == routes), times = 2), lty="dashed")
+  lines(x = c(fitted_tbl_route$ci.lb[fitted_tbl_route$slab == surg],
+              fitted_tbl_route$ci.ub[fitted_tbl_route$slab == surg]),
+        y = rep(which(surg == routes), times = 2), lwd=2)
+  points(x = fitted_tbl_route$pred[fitted_tbl_route$slab == surg],
+         y = which(surg == routes),
+         pch = 16)
+}
+#x-axis
+x_ticks <- c(-1.2, -0.9, -0.6, -0.3, 0, 0.3)
+axis(side = 1, at = x_ticks, labels = signif(exp(x_ticks), digits = 2))
+#y-axis
+axis(side = 2, at = 1:length(routes), labels = routes, las = 1)
+#Reset the margins to default
+par(mar = c(5.1, 4.1, 4.1, 2.1))
+
+```
+

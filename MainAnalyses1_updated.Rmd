@@ -1,0 +1,1527 @@
+---
+output: 
+  pdf_document:
+    toc: true  # Adds the table of contents
+    toc_depth: 2  # Set the depth of headers to include in the TOC
+---
+<!-- Output in this file:
+
+-----------------------------------------------------------------
+
+Blood transfusion
+
+Fixed effects meta-analysis of blood transfusion
+ - Parameter estimates and model fit statistics
+ - Forest plot (combined with random effects model)
+ - Funnel plots
+    - by type of surgery
+    - by route of administration
+Random effects meta-analysis of blood transfusion
+ - Parameter estimates and model fit statistics
+ - Forest plot (combined with fixed effects model)
+
+Fixed effects meta-regression of blood transfusion adjusted for blood loss in placebo arm
+ - Parameter estimates and model fit statistics
+ - Funnel plots
+    - by type of surgery
+    - by route of administration
+Random effects meta-regression of blood transfusion adjusted for blood loss in placebo arm
+ - Parameter estimates and model fit statistics
+ 
+-----------------------------------------------------------------
+
+Length of stay
+
+Fixed effects meta-analysis of length of stay
+ - Parameter estimates and model fit statistics
+ - Forest plot (combined with random effects model)
+ - Funnel plots
+    - by type of surgery
+    - by route of administration
+Random effects meta-analysis of length of stay
+ - Parameter estimates and model fit statistics
+ - Forest plot (combined with fixed effects model)
+ 
+-----------------------------------------------------------------
+
+Thrombosis
+
+Fixed effects meta-analysis of length of stay
+ - Parameter estimates and model fit statistics
+ - Funnel plot
+Random effects meta-analysis of length of stay
+ - Parameter estimates and model fit statistics
+ - Forest plot
+ 
+-----------------------------------------------------------------
+
+Pain
+
+
+-->
+
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE}
+# Low risk trials
+TransData <- read.csv("LowRiskTransfusion2025.csv")
+TBLData <- read.csv("LowRiskTBL2025.csv")
+ThrombData <- read.csv("LowRiskThrombosis2025.csv")
+LowRiskAllOutcomes <- read.csv("LowRiskAllOutcomes2025.csv")
+
+# High risk trials
+OrthoTransData <- read.csv("HighRiskTrans.csv")
+OrthoTBLData <- read.csv("HighRiskTBL.csv")
+
+library(metafor) # main package for analysis
+library(dplyr)
+```
+
+
+``` {r Remove Obstetrics Studies}
+# Create vector of Studies to be removed
+# These are all Obstetrics Studies Obtained from included_RCTS_Table.docx w/ Nishant 
+# And Shehata for unreliability
+names_to_remove <- c("Bharati", "Bose", "Chaiyakarn", "Fahmy", "Iqbal", "Jafarbegloo",
+                     "Masood", "Naeiji", "Ogunkua", "Olugbenga", "Pacheco", "Pakniat", 
+                     "Priyanka", "Sentilhes", "Shah", "Shalaby", "Singh", "Sinha", 
+                     "Tabatabaie","Shehata")
+
+# Define a pattern using the names
+pattern <- paste(names_to_remove, collapse = "|")
+
+
+# Remove rows based on pattern, specifying the column to search
+LowRiskAllOutcomes <- LowRiskAllOutcomes %>% 
+  filter(!grepl(pattern, Study))              # 4 removed
+
+OrthoTBLData <- OrthoTBLData %>% 
+  filter(!grepl(pattern, Study))              # 0 removed
+
+OrthoTransData <- OrthoTransData %>% 
+  filter(!grepl(pattern, Study))              # 0 removed
+
+TBLData <- TBLData %>% 
+  filter(!grepl(pattern, Study))              # 4 removed
+
+ThrombData <- ThrombData %>% 
+  filter(!grepl(pattern, Study))              # 3 removed
+
+TransData <- TransData %>% 
+  filter(!grepl(pattern, Study))              # 3 removed
+
+# The 4 studies removed are:
+# "Jafarbegloo_2022", "Chaiyakarn_2023",  "Pacheco_2023" , "Singh_2022"
+
+#rm(names_to_remove, pattern)
+
+```
+
+
+
+
+
+# Transfusion Analysis
+
+## Forest plot
+
+``` {r Transfusion}
+
+TransData <- TransData[order(TransData$covar.Surg),]
+
+# remove double-zero study
+TransData <- TransData[TransData$Study != "Ranström_1993",]
+
+# continuity correction
+#Row index for trials with an outcome of 0 in either arm
+zero_index <- which(TransData$R.1 == 0 | TransData$R.2 == 0)
+#Display the trials to add a continuity correction to
+TransData$Study[zero_index]
+#Add 0.5 to numerator and denominator in both arms
+TransData$R.1[zero_index] <- TransData$R.1[zero_index] + 0.5
+TransData$R.2[zero_index] <- TransData$R.2[zero_index] + 0.5
+TransData$N.1[zero_index] <- TransData$N.1[zero_index] + 0.5
+TransData$N.2[zero_index] <- TransData$N.2[zero_index] + 0.5
+
+# odds ratios
+TransData$logor = log( (TransData$R.2/(TransData$N.2 - TransData$R.2) ) / (TransData$R.1/(TransData$N.1-TransData$R.1)))
+
+TransData$selogor=sqrt((1/TransData$R.1)+(1/(TransData$N.1-
+                                            TransData$R.1))+(1/TransData$R.2)+(1/(TransData$N.2-
+                                                                                TransData$R.2)))
+# calculate 2x2 cell data
+TransData$a = TransData$R.2
+TransData$b = TransData$N.2 - TransData$R.2
+TransData$c = TransData$R.1
+TransData$d = TransData$N.1 - TransData$R.1
+
+# Only trials where control arm blood loss < 500ml
+
+# TransData <- TransData[TransData$covar.pTBL < 500,]
+
+# with blood loss in placebo arm as covariate
+fixedTrans<-rma(ai=a, bi=b, ci=c, di=d, measure="OR", method="FE", mods = ~ covar.pTBL, data=TransData)
+
+# without covariate
+fixedTransNoCov<- rma(ai=a, bi=b, ci=c, di=d, measure="OR", method="FE", data=TransData)
+
+# with blood loss in placebo arm as covariate
+randomTrans<-rma(ai=a, bi=b, ci=c, di=d, measure="OR", mods = ~ covar.pTBL, data=TransData)
+
+# without covariate
+randomTransNoCov<-rma(ai=a, bi=b, ci=c, di=d, measure="OR", data=TransData)
+
+TransData2 <- TransData
+TransData2$R.1[c(10,12,21)] <- TransData$R.1[c(10,12,21)] - 0.5
+TransData2$R.2[c(10,12,21)] <- TransData$R.2[c(10,12,21)] - 0.5
+#sensitivity
+#TransData2$R.1[c(4,14)] <- TransData$R.1[c(4,14)] - 0.5
+#TransData2$R.2[c(4,14)] <- TransData$R.2[c(4,14)] - 0.5
+
+
+
+
+# Forest plot of transfusion odds ratios
+
+forest(randomTransNoCov, slab = paste(TransData$Study),
+       xlim = c(-16, 6), at = log(c(0.01, 0.25, 1, 7)), ilab = cbind(TransData2$R.2, TransData2$b, TransData2$R.1, TransData2$d), ilab.xpos = c(-11, -9.5, -7.5, -6), cex=0.7, header = FALSE, ylim = c(-3, 24), atransf = exp, addfit = FALSE,
+       main = "Forest Plot of Blood Transfusion Meta-Analysis")
+text(c(-11, -9.5, -7.5, -6), 22.5, c("Transf", "No Transf", "Transf", "No Transf"), cex=0.7)
+text(c(-10.25, -6.75), 23.5, c("TXA", "Control"), cex=0.7)
+text(-16, 22.5, "Study ID", pos = 4, cex=0.7)
+text(6, 22.5, "Odds Ratio [95% CI]", pos = 2, cex=0.7)
+addpoly.rma(fixedTransNoCov, row=-2, mlab = "FE Model", addpred=TRUE)
+addpoly.rma(randomTransNoCov, row=-1, mlab = "RE Model", addpred=TRUE)
+abline(h=0)
+
+```
+
+``` {r}
+# GSprob<-rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, subset=covar.Surg=="General Surgery")
+# Uprob<-rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, subset=covar.Surg=="Urology")
+# PSprob<-rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, subset=covar.Surg=="Plastic Surgery")
+# Gprob<-rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, subset=covar.Surg=="Gynecology")
+# Oprob<-rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, subset=covar.Surg=="Otolaryngology (ENT)")
+# prob = rma(xi=R.1, ni=N.1, measure="PLO", data=TransData)
+# probFE = rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, method="FE")
+# 
+# forest(prob, slab = paste(TransData$Study),
+#        xlim = c(-16, 4),
+#        ylim=c(-3,38.5),
+#        rows=c(35,32:23,19,15,11:3),
+#        ilab = cbind(TransData2$R.1, TransData2$d),
+#        ilab.xpos = c(-12, -8)  ,cex=0.7,
+#        header=FALSE,
+#        addfit=FALSE)
+# text(c(-12, -8), 37, c("Transf", "Total"), cex=0.75)
+# text(-10, 38, "Control Group", cex=0.75)
+# text(-16, 37, "Study ID", pos = 4, cex=0.75)
+# text(4, 37, "Log Odds [95% CI]", pos = 2, cex=0.75)
+# addpoly.rma(GSprob, row=33.5, cex=0.7, mlab="General Surgery", addpred=TRUE)
+# addpoly.rma(Gprob, row=21.5, cex=0.7, mlab="Gynecology", addpred=TRUE)
+# addpoly.rma(Oprob, row=17.5, cex=0.7, mlab="Otolaryngology (ENT)", addpred=TRUE)
+# addpoly.rma(PSprob, row=13.5, cex=0.7, mlab="Plastic Surgery", addpred=TRUE)
+# addpoly.rma(Uprob, row=1.5, cex=0.7, mlab="Urology", addpred=TRUE)
+# addpoly.rma(probFE, row=-2, mlab = "FE Model", addpred=TRUE)
+# addpoly.rma(prob, row=-1, mlab = "RE Model", addpred=TRUE)
+# abline(h=0)
+# title("Forest plot of random effects meta-analysis for the probability of transfusion \n in control arms. Subgrouped by surgical field.")
+```
+
+``` {r}
+# GSprob<-rma(xi=R.1, ni=N.1, measure="PR", data=TransData, subset=covar.Surg=="General Surgery")
+# Uprob<-rma(xi=R.1, ni=N.1, measure="PR", data=TransData, subset=covar.Surg=="Urology")
+# PSprob<-rma(xi=R.1, ni=N.1, measure="PR", data=TransData, subset=covar.Surg=="Plastic Surgery")
+# Gprob<-rma(xi=R.1, ni=N.1, measure="PR", data=TransData, subset=covar.Surg=="Gynecology")
+# Oprob<-rma(xi=R.1, ni=N.1, measure="PR", data=TransData, subset=covar.Surg=="Otolaryngology (ENT)")
+# prob = rma(xi=R.1, ni=N.1, measure="PR", data=TransData)
+# probFE = rma(xi=R.1, ni=N.1, measure="PR", data=TransData, method="FE")
+# 
+# forest(prob, slab = paste(TransData$Study),
+#        xlim = c(-8, 4),
+#        ylim=c(-3,38.5),
+#        rows=c(35,32:23,19,15,11:3),
+#        ilab = cbind(TransData2$R.1, TransData2$d),
+#        ilab.xpos = c(-5, -3)  ,cex=0.7,
+#        header=FALSE,
+#        addfit=FALSE)
+# text(c(-5, -3), 37, c("Transf", "Total"), cex=0.75)
+# text(-4, 38, "Control Group", cex=0.75)
+# text(-8, 37, "Study ID", pos = 4, cex=0.75)
+# text(4, 37, "Proportion [95% CI]", pos = 2, cex=0.75)
+# addpoly.rma(GSprob, row=33.5, cex=0.7, mlab="General Surgery", addpred=TRUE)
+# addpoly.rma(Gprob, row=21.5, cex=0.7, mlab="Gynecology", addpred=TRUE)
+# addpoly.rma(Oprob, row=17.5, cex=0.7, mlab="Otolaryngology (ENT)", addpred=TRUE)
+# addpoly.rma(PSprob, row=13.5, cex=0.7, mlab="Plastic Surgery", addpred=TRUE)
+# addpoly.rma(Uprob, row=1.5, cex=0.7, mlab="Urology", addpred=TRUE)
+# addpoly.rma(probFE, row=-2, mlab = "FE Model", addpred=TRUE)
+# addpoly.rma(prob, row=-1, mlab = "RE Model", addpred=TRUE)
+# abline(h=0)
+# title("Forest plot of random effects meta-analysis for the probability of transfusion \n in control arms. Subgrouped by surgical field.")
+```
+
+
+## Funnel plots
+
+
+``` {r}
+
+# Coding for annotation of points on forest plot
+
+SurgCode <- TransData$covar.Surg
+SurgCode[SurgCode == "Gynecology"] = 2
+SurgCode[SurgCode == "Plastic Surgery"] = 3
+SurgCode[SurgCode == "Urology"] = 4
+SurgCode[SurgCode == "General Surgery"] = 1
+SurgCode <- as.numeric(SurgCode)
+
+# 2 Funnel plots with surgery type labelled, first is normal, second plots residual value from model adjusting for covariate
+# can be easily switched from fixed to random effects
+#
+
+FunnelTrans <- funnel(randomTransNoCov, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                      main = "Funnel Plot: Transfusion Meta-Analysis \n (RE model w/ no Covariates)")
+legend("topright", legend = unique(TransData$covar.Surg), pch = seq(1,4))
+
+FunnelTrans <- funnel(randomTrans, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                      main = "Funnel Plot: Transfusion Meta-Analysis \n (RE model w/ Blood Loss in Control Arm as Covariate)")
+legend("topright", legend = unique(TransData$covar.Surg), pch = seq(1,4))
+
+# same but for route of administration of txa as label
+
+RouteCode <- TransData$covar.Route
+RouteCode[RouteCode == "Missing"] = 4
+RouteCode[RouteCode == "Combined"] = 1
+RouteCode[RouteCode == "Intramuscular"] = 2
+RouteCode[RouteCode == "Oral"] = 5
+RouteCode[RouteCode == "Topical/Intra-articular"] = 6
+RouteCode[RouteCode == "Intravenous"] = 3
+RouteCode <- as.numeric(RouteCode)
+
+FunnelTrans <- funnel(fixedTransNoCov, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                      main = "Funnel Plot: Transfusion Meta-Analysis \n (FE model w/ no Covariates)")
+legend("topright", legend = unique(TransData$covar.Route), pch = seq(1,6))
+
+FunnelTrans <- funnel(fixedTrans, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                      main = "Funnel Plot: Transfusion Meta-Analysis \n (FE model w/ Blood Loss in Control Arm as Covariate)")
+legend("topright", legend = unique(TransData$covar.Route), pch = seq(1,6))
+```
+
+
+``` {r asymmetry models}
+
+## Numerical methods to assess asymmetry
+
+# model1 <- randomTransNoCov
+# model2 <- randomTrans
+# model3 <- randomTransNoCov
+# model4 <- randomTrans
+# model5 <- randomTransNoCov
+# model6 <- randomTrans
+# 
+# model1 <- fixedTransNoCov
+# model2 <- fixedTrans
+# model3 <- fixedTransNoCov
+# model4 <- fixedTrans
+# model5 <- fixedTransNoCov
+# model6 <- fixedTrans
+# 
+# 
+#   ## Model 1: PB test using standard error: naïve test
+# 
+#   # Extract residuals and SE from model 1 and then put these directly into regtest
+#   a1 <- rstandard.rma.uni(model1)
+#   m1.residuals <- a1$resid
+#   m1.SEresiduals <- a1$se
+#   
+#   # Funnel asymmetry test 
+#   m1 <- regtest(x=m1.residuals, sei=m1.SEresiduals, model = "lm", predictor="sei")
+#   print(regtest(x=m1.residuals, sei=m1.SEresiduals, model = "lm", predictor="sei"))
+#   
+#   plot(m1.residuals, m1.SEresiduals)
+# 
+# ## Model 2: PB test using standard error: Two-stage
+# 
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   a2 <-  rstandard.rma.uni(model2)
+#   m2.residuals <- a2$resid
+#   m2.SEresiduals <- a2$se
+# 
+#   m2 <- regtest(x=m2.residuals, sei=m2.SEresiduals, model = "lm", predictor="sei")
+#   print(regtest(x=m2.residuals, sei=m2.SEresiduals, model = "lm", predictor="sei"))
+#   
+#   plot(m2.residuals, m2.SEresiduals)
+# 
+# ## Model 3: PB test using sample size: naïve test
+# 
+#   # Extract residuals and SE from model 3 and then put these directly into regtest
+#   a3 <- rstandard.rma.uni(model3)
+#   m3.residuals <- a3$resid
+#   m3.SEresiduals <- a3$se
+#   
+#   # Funnel asymmetry test 
+#   m3 <- regtest(x=m3.residuals, sei=m3.SEresiduals, ni=model3$ni, model = "lm", predictor="ni")
+#   print(regtest(x=m3.residuals, sei=m3.SEresiduals, ni=model3$ni, model = "lm", predictor="ni"))
+#   
+#   plot(m3.residuals,model3$ni, ylim=c(0,500))
+# 
+# ## Model 4: PB test using sample size: Two-stage
+#   
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   # Extract residuals and SE from model 4 and then put these directly into regtest
+#   a4 <- rstandard.rma.uni(model4)
+#   m4.residuals <- a4$resid
+#   m4.SEresiduals <- a4$se
+#   
+#   m4 <- regtest(x=m4.residuals, sei=m4.SEresiduals, ni=model4$ni, model = "lm", predictor="ni")
+#   print(regtest(x=m4.residuals, sei=m4.SEresiduals, ni=model4$ni, model = "lm", predictor="ni"))
+#   
+#   plot(m4.residuals, model4$ni)
+# 
+# ## Model 5: PB test using inverse sample size: naïve test
+#   
+#   # Extract residuals and SE from model 5 and then put these directly into regtest
+#   a5 <- rstandard.rma.uni(model5)
+#   m5.residuals <- a5$resid
+#   m5.SEresiduals <- a5$se
+#   
+#   # Funnel asymmetry test 
+#   m5 <- regtest(x=m5.residuals, sei=m5.SEresiduals, ni=model5$ni, model = "lm", predictor="ninv")
+#   print(regtest(x=m5.residuals, sei=m5.SEresiduals, ni=model5$ni, model = "lm", predictor="ninv"))
+#   
+#   plot(m5.residuals,1/model5$ni)
+# 
+# ## Model 6: PB test using inverse sample size: Two-stage
+#   
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   # Extract residuals and SE from model 6 and then put these directly into regtest
+#   a6 <- rstandard.rma.uni(model6)
+#   m6.residuals <- a6$resid
+#   m6.SEresiduals <- a6$se
+#   
+#   m6 <- regtest(x=m6.residuals, sei=m6.SEresiduals, ni=model6$ni, model = "lm", predictor="ninv")
+#   print(regtest(x=m6.residuals, sei=m6.SEresiduals, ni=model6$ni, model = "lm", predictor="ninv"))
+#   
+#   plot(m6.residuals,model6$ni)
+
+```
+
+
+## Regression with blood loss as covariate
+
+``` {r regression}
+
+# Fitting model with low risk trials and extracting predictions
+
+res.reg1 <- rma(ai=a, bi=b, ci=c, di=d, mods = ~ covar.pTBL, data = TransData, measure="OR")
+res.reg1
+
+preds1<-predict(res.reg1, newmods = cbind(seq(from = 0, to = 1200, by = 1)), transf = exp, addx = TRUE)
+
+# combine orthopaedics data (high risk trials) into big dataset
+
+#(Added by Tom) Drop columns that we don't need and which prevent the two datasets being combined
+names(OrthoTransData)[names(OrthoTransData) == "selogOR"] <- "selogor"
+TransData2 <- TransData[, names(OrthoTransData)]
+
+# names(OrthoTransData) <- names(TransData)         Commented out by Tom
+TransDataFull <- rbind(TransData2, OrthoTransData)
+TransDataFull$logor <- as.numeric(TransDataFull$logor)
+
+TransDataFull$wi <- 1/TransDataFull$selogor
+
+TransDataFull <- TransDataFull[!is.na(TransDataFull$logor),]
+Ortho <- c(rep(1,22),rep(2,58))
+
+TransDataFull$a = TransDataFull$R.2
+TransDataFull$b = TransDataFull$N.2 - TransDataFull$R.2
+TransDataFull$c = TransDataFull$R.1
+TransDataFull$d = TransDataFull$N.1 - TransDataFull$R.1
+
+#TransDataFull <- TransDataFull[-c(25,26,38),] # remove 3 trials
+
+# Model with only high risk trials
+
+res.reg2 <- rma(ai=a, bi=b, ci=c, di=d, mods = ~ covar.pTBL, data = subset(TransDataFull[c(23:80),], covar.pTBL < 2000), measure="OR")
+res.reg2
+
+preds2 <- predict(res.reg2, newmods = cbind(seq(from = 0, to = 2500, by =1)), transf = exp, addx = TRUE)
+
+res.reg3 <- rma(ai=a, bi=b, ci=c, di=d, mods = ~ covar.pTBL, data = subset(TransDataFull, covar.pTBL < 2000), measure="OR")
+res.reg3
+
+preds3 <- predict(res.reg3, newmods = cbind(seq(from = 0, to = 1200, by =1)), transf = exp, addx = TRUE)
+```
+
+
+``` {r regression plot}
+
+
+size <- 0.5 + 3 * (TransDataFull$wi - min(TransDataFull$wi, na.rm=TRUE))/(max(TransDataFull$wi, na.rm=TRUE) - min(TransDataFull$wi, na.rm=TRUE)) # for sizing of points
+
+
+## Regression plot
+
+plot(TransDataFull$covar.pTBL, exp(TransDataFull$logor), pch = Ortho, cex = size, lwd=2, col=c(rep("black",22),rep("blue",55)),
+     xlab = "Blood loss in control arm (ml)", ylab = "Odds Ratio of Transfusion",
+     las = 1, bty = "l", log = "y", ylim = c(0.05,10),
+     main = "Relationship Between Blood Loss in Control Arm \n and Odds Ratio of Transfusion")
+lines(0:1200, preds1$pred, lwd=2)                       # low risk trials (CI below)
+# lines(0:1200, preds1$ci.lb, lty = "dashed")
+# lines(0:1200, preds1$ci.ub, lty = "dashed")
+lines(0:2500, preds2$pred, col="blue", lwd=2)           # High risk trials (CI below)
+# lines(0:2500, preds2$ci.lb, lty = "dashed", col="blue")
+# lines(0:2500, preds2$ci.ub, lty = "dashed", col="blue")
+abline(h = 1, lty = "dotted")
+lines(0:1200, preds3$pred, col="red", lwd=2)           # All trials
+legend("topright", legend=c("Low Risk", "High Risk", "All trials"),
+       col=c("black","blue", "red"), lty=c(1,1,1), cex=0.8)
+```
+
+``` {r}
+# meta analysis and regression of logit proportion of patients
+
+TransData$pc <- TransData$R.1 / TransData$N.1
+TransData$LOC <- log(TransData$pc/(1-TransData$pc))
+TransData$LOCVar <- 1/TransData$R.1 + 1/(TransData$N.1-TransData$R.1)
+
+TransData$highpTBL <- 0
+TransData$highpTBL[TransData$covar.pTBL > 500] <- 1
+
+LogitProportion<-rma(ai=a, bi=b, ci=c, di=d, measure="OR", mods = ~ covar.pTBL, data=TransData)
+
+plot(y=TransData$LOC, x=TransData$covar.pTBL, cex = size, lwd=2,
+     xlab = "Blood loss in control arm (ml)", ylab = "Logit Proportion of Patients Transfused in Control Arm",
+     main = "Relationship Between Logit Proportion of Patients Transfused \n in Control Arm and Blood Loss in Control Arm")
+
+prob = rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, mods = ~ covar.pTBL)
+prob
+
+prob2 = rma(xi=R.1, ni=N.1, measure="PLO", data=TransData, mods = ~ highpTBL)
+prob2
+
+preds <- predict(prob, newmods = cbind(seq(from = 0, to = 1200, by =1)), addx = TRUE)
+lines(0:1200, preds$pred, lwd=2)
+ lines(0:1200, preds$ci.lb, lty = "dashed")
+ lines(0:1200, preds$ci.ub, lty = "dashed")
+```
+
+
+``` {r}
+# Just using low risk trials
+
+#The types of surgery
+surgery_types <- sort(unique(TransData$covar.Surg))
+
+#Random effects MR
+random_trans_surg <- rma(ai=a, bi=b, ci=c, di=d, mods = ~ covar.Surg, data=TransData, measure="OR")
+summary(random_trans_surg)
+```
+
+
+``` {r}
+#Matrix used to get the fitted values by surgery type
+surgery_types_matrix <- rbind(rep(0, times = length(surgery_types) - 1), diag(1, nrow = length(surgery_types) - 1))
+rownames(surgery_types_matrix) <- surgery_types
+#Fitted values by surgery type
+fitted_trans_surg <- predict(random_trans_surg, newmods = surgery_types_matrix, addx = TRUE)
+
+```
+
+### Subgroup plot
+
+``` {r}
+#Increase the left margin to allow the type of surgery labels to fit
+par(mar = c(5.1, 10, 4.1, 2.1))
+#Set up the plot area
+plot(NA, NA, xlim = c(-6, 2), ylim = c(0.5, length(surgery_types) + 0.5), xlab = "Mean & 95% Confidence / Prediction Interval",
+ylab = "", xaxt = "n", yaxt = "n",
+main = "Odds ratio of transfusion\nby type of surgery")
+#Add mean and CI for each type of surgery
+for (surg in surgery_types) {
+lines(x = c(fitted_trans_surg$pi.lb[fitted_trans_surg$slab == surg],
+fitted_trans_surg$pi.ub[fitted_trans_surg$slab == surg]),
+y = rep(which(surg == surgery_types), times = 2), lty="dashed")
+lines(x = c(fitted_trans_surg$ci.lb[fitted_trans_surg$slab == surg],
+fitted_trans_surg$ci.ub[fitted_trans_surg$slab == surg]),
+y = rep(which(surg == surgery_types), times = 2), lwd=2)
+points(x = fitted_trans_surg$pred[fitted_trans_surg$slab == surg],
+y = which(surg == surgery_types),
+pch = 16)
+}
+#x-axis
+x_ticks <- c(-6, -4, -2, 0, 2)
+axis(side = 1, at = x_ticks, labels = signif(exp(x_ticks), digits = 1))
+#y-axis
+axis(side = 2, at = 1:length(surgery_types), labels = surgery_types, las = 1)
+
+```
+
+``` {r}
+#Reset the margins to default
+par(mar = c(5.1, 4.1, 4.1, 2.1))
+```
+
+``` {r}
+# Just using low risk trials
+#Combine the two "combined" routes of administration
+combined_index <- grep(pattern = "Combined", x = TransData$covar.Route)
+TransData$covar.Route[combined_index] <- "Combined"
+#The routes of administration
+routes <- sort(unique(TransData$covar.Route))
+#Random effects MR
+random_trans_route <- rma(ai=a, bi=b, ci=c, di=d, mods = ~ covar.Route, data = TransData, measure="OR")
+summary(random_trans_route)
+```
+
+``` {r}
+# Matrix used to get the fitted values by surgery type
+routes_matrix <- rbind(rep(0, times = length(routes) - 1), diag(1, nrow = length(routes) - 1))
+rownames(routes_matrix) <- routes
+#Fitted values by surgery type
+fitted_trans_route <- predict(random_trans_route, newmods = routes_matrix, addx = TRUE)
+```
+
+### Subgroup plot
+
+``` {r}
+#Increase the left margin to allow the route labels to fit
+par(mar = c(5.1, 11, 4.1, 2.1))
+#Set up the plot area
+plot(NA, NA, xlim = c(-6, 2), ylim = c(0.5, length(routes) + 0.5), xlab = "Mean & 95% Confidence / Prediction Interval",
+ylab = "", xaxt = "n", yaxt = "n",
+main = "Odds ratio of transfusion\nby route of administration")
+#Add mean and CI for each route of administration
+for (route in routes) {
+lines(x = c(fitted_trans_route$pi.lb[fitted_trans_route$slab == route],
+fitted_trans_route$pi.ub[fitted_trans_route$slab == route]),
+y = rep(which(route == routes), times = 2), lty="dashed")
+lines(x = c(fitted_trans_route$ci.lb[fitted_trans_route$slab == route],
+fitted_trans_route$ci.ub[fitted_trans_route$slab == route]),
+y = rep(which(route == routes), times = 2), lwd=2)
+points(x = fitted_trans_route$pred[fitted_trans_route$slab == route],
+y = which(route == routes),
+pch = 16)
+}
+#x-axis
+x_ticks <- c(-6, -4, -2, 0, 2)
+axis(side = 1, at = x_ticks, labels = signif(exp(x_ticks), digits = 1))
+#y-axis
+axis(side = 2, at = 1:length(routes), labels = routes, las = 1)
+```
+
+``` {r}
+#Reset the margins to default
+par(mar = c(5.1, 4.1, 4.1, 2.1))
+
+```
+
+# Blood Loss
+
+``` {r Blood loss setup, fig.height = 10, fig.width = 8}
+
+# mean difference
+TBLData$MD <- TBLData$Mean.2 - TBLData$Mean.1
+
+TBLData$seMD <- sqrt((TBLData$SD.1^2)/TBLData$N.1 + (TBLData$SD.2^2)/TBLData$N.2)
+
+# fixed and random effects models
+fixedTBL<- rma(yi=MD, sei=seMD, data=TBLData, method='FE')
+
+randomTBL<-rma(yi=MD, sei=seMD, data=TBLData)
+
+
+#Scatterplot of blood loss in TXA arm vs placebo arm
+plot(TBLData$Mean.1,TBLData$Mean.2,
+     xlab = "Blood loss in placebo arm (ml)", xlim = c(0, 1200),
+     ylab = "Blood loss in TXA arm (ml)", ylim = c(0, 1200),
+     main = "Blood loss in TXA arm vs blood loss in placebo arm")
+lines(0:1200, lty = 2)
+
+
+# Forest plot
+
+TBLData$SD.2 <- round(TBLData$SD.2,2)
+# TblForestNum <- cbind(TBLData$Mean.2, TBLData$SD.2, TBLData$N.2, TBLData$Mean.1, TBLData$SD.1, TBLData$N.1)
+# TblForestNum <- TblForestNum[!is.na(TBLData$SD.1)|!is.na(TBLData$SD.2),]
+
+forest(randomTBL, slab = paste(TBLData$Study),
+       xlim = c(-1800,700), ylim = c(-3, 53), ilab = cbind(TBLData$Mean.2, TBLData$SD.2, TBLData$N.2, TBLData$Mean.1, TBLData$SD.1, TBLData$N.1), ilab.xpos = seq(-1300,-650,length.out=6), order = order(TBLData$covar.Surg), cex=0.7,
+       header = FALSE,
+       addfit = FALSE,)
+text(seq(-1300,-650,length.out=6), 51.5, c("Mean","SD","N","Mean","SD","N"),cex=0.7)
+text(seq(-1300,-650,length.out=6)[c(2,5)], 52.5, c("Treatment", "Control"),cex=0.7)
+text(-1800, 51.5, "Study ID", pos = 4,cex=0.7)
+text(700, 51.5, "Mean Difference [95% CI]", pos = 2,cex=0.7)
+
+abline(h=0)
+addpoly.rma(fixedTBL, row=-2, mlab = "FE Model", addpred=TRUE)
+addpoly.rma(randomTBL, row=-1, mlab = "RE Model", addpred=TRUE)
+
+```
+
+
+``` {r}
+TBLData <- TBLData[order(TBLData$covar.Surg),]
+
+# Umean<-rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, subset=covar.Surg=="Urology")
+# Omean<-rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, subset=covar.Surg=="Orthopaedics")
+# OTmean<-rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, subset=covar.Surg=="Otolaryngology (ENT)")
+# Gmean<-rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, subset=covar.Surg=="Gynecology")
+# OMmean<-rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, subset=covar.Surg=="Oral & Maxillofacial")
+# mean = rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData)
+# meanFE = rma(mi=Mean.1, sdi=SD.1, ni=N.1, measure="MN", data=TBLData, method="FE")
+# 
+# forest(mean, slab = paste(TBLData$Study),
+#        xlim = c(-1500, 2000), at = c(0,250,500,750,1000),
+#        rows=c(70 ,66:54, 50:49, 45:38, 34:12, 8:3),
+#        ilab = cbind(TBLData$Mean.1, TBLData$SD.1, TBLData$N.1),
+#        ilab.xpos = c(-700,-500,-300), cex=0.6)
+# text(c(-700,-500,-300), 62, c("Mean","SD","N"), cex=0.6)
+# text(c(-500), 63, "Control", cex=0.6)
+# text(-1500, 62, "Study ID", pos = 4, cex=0.6)
+# text(2000, 62, "Mean [95% CI]", pos = 2,cex=0.6)
+# addpoly.rma(meanFE, cex=0.6, addpred=TRUE)
+# addpoly.rma(Gmean, row=52.5, cex=0.6, mlab="Gynecology", addpred=TRUE)
+# addpoly.rma(OMmean, row=47.5, cex=0.6, mlab="Oral & Maxillofacial", addpred=TRUE)
+# addpoly.rma(Omean, row=37.5, cex=0.6, mlab="Orthopaedics", addpred=TRUE)
+# addpoly.rma(OTmean, row=13.5, cex=0.6, mlab="Otolaryngology (ENT)", addpred=TRUE)
+# addpoly.rma(Umean, row=1.5, cex=0.6, mlab="Urology", addpred=TRUE)
+# title("Forest plot of random effects meta-analysis for the mean TBL (ml) \n in control arms. Subgrouped by surgical field.")
+```
+
+## Funnel plots
+
+
+``` {r}
+
+# models with and without covariate
+
+fixedTBL<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, mods = ~ covar.pTBL, measure="MD", data=TBLData, method='FE')
+fixedTBLnoCov<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, measure="MD", data=TBLData, method='FE')
+randomTBL<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, mods = ~ covar.pTBL, measure="MD", data=TBLData)
+randomTBLnoCov<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, measure="MD", data=TBLData)
+
+
+
+# SurgeryCode
+
+SurgCode <- TBLData$covar.Surg
+SurgCode[SurgCode == "Otolaryngology (ENT)"] = 6
+SurgCode[SurgCode == "Gynecology"] = 2
+SurgCode[SurgCode == "Orthopaedics"] = 5
+SurgCode[SurgCode == "Urology"] = 8
+SurgCode[SurgCode == "General Surgery"] = 1
+SurgCode[SurgCode == "Obstetrics"] = 3
+SurgCode[SurgCode == "Oral & Maxillofacial"] = 4
+SurgCode[SurgCode == "Plastic Surgery"] = 7
+SurgCode <- as.numeric(SurgCode)
+
+# Funnel plots with and without covariate
+
+FunnelTBL <- funnel(randomTBLnoCov, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                     main = "Funnel Plot: Blood Loss Meta-Analysis \n (RE model w/ no Covariates)")
+legend("topright", legend = unique(TBLData$covar.Surg), pch = seq(1,8))
+FunnelTBL <- funnel(randomTBL, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                    main = "Funnel Plot: Blood Loss Meta-Analysis \n (RE model w/ Covariates)")
+legend("topright", legend = unique(TBLData$covar.Surg), pch = seq(1,8))
+
+
+# Route of administration code
+
+RouteCode <- TBLData$covar.Route
+RouteCode[RouteCode == "Missing"] = 3
+RouteCode[RouteCode == "Combined"] = 4
+RouteCode[RouteCode == "Intramuscular"] = 5
+RouteCode[RouteCode == "Oral"] = 6
+RouteCode[RouteCode == "Topical/Intra-articular"] = 1
+RouteCode[RouteCode == "Intravenous"] = 2
+RouteCode <- as.numeric(RouteCode)
+
+FunnelTBL <- funnel(randomTBLnoCov, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                    main = "Funnel Plot: Blood Loss Meta-Analysis \n (RE model w/ no Covariates)")
+legend("topright", legend = unique(TBLData$covar.Route), pch = seq(1,6))
+FunnelTBL <- funnel(randomTBL, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                    main = "Funnel Plot: Blood Loss Meta-Analysis \n (RE model w/ Covariates)")
+legend("topright", legend = unique(TBLData$covar.Route), pch = seq(1,6))
+
+```
+
+``` {r}
+
+# Numerical methods to assess funnel plot asymmetry
+
+
+# model1 <- randomTBLnoCov
+# model2 <- randomTBL
+# model3 <- randomTBLnoCov
+# model4 <- randomTBL
+# model5 <- randomTBLnoCov
+# model6 <- randomTBL
+# 
+# # model1 <- fixedTBLnoCov
+# # model2 <- fixedTBL
+# # model3 <- fixedTBLnoCov
+# # model4 <- fixedTBL
+# # model5 <- fixedTBLnoCov
+# # model6 <- fixedTBL
+# 
+# 
+#   ## Model 1: PB test using standard error: naïve test
+# 
+#   # Extract residuals and SE from model 1 and then put these directly into regtest
+#   a1 <- rstandard.rma.uni(model1)
+#   m1.residuals <- a1$resid
+#   m1.SEresiduals <- a1$se
+#   
+#   # Funnel asymmetry test 
+#   m1 <- regtest(x=m1.residuals, sei=m1.SEresiduals, model = "lm", predictor="sei")
+#   print(regtest(x=m1.residuals, sei=m1.SEresiduals, model = "lm", predictor="sei"))
+#   
+#   plot(m1.residuals, m1.SEresiduals, xlim=c(-300,300))
+# 
+# ## Model 2: PB test using standard error: Two-stage
+# 
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   a2 <-  rstandard.rma.uni(model2)
+#   m2.residuals <- a2$resid
+#   m2.SEresiduals <- a2$se
+# 
+#   m2 <- regtest(x=m2.residuals, sei=m2.SEresiduals, model = "lm", predictor="sei")
+#   print(regtest(x=m2.residuals, sei=m2.SEresiduals, model = "lm", predictor="sei"))
+#   
+#   plot(m2.residuals, m2.SEresiduals, xlim=c(-300,300))
+# 
+# ## Model 3: PB test using sample size: naïve test
+# 
+#   # Extract residuals and SE from model 3 and then put these directly into regtest
+#   a3 <- rstandard.rma.uni(model3)
+#   m3.residuals <- a3$resid
+#   m3.SEresiduals <- a3$se
+#   
+#   # Funnel asymmetry test 
+#   m3 <- regtest(x=m3.residuals, sei=m3.SEresiduals, ni=model3$ni, model = "lm", predictor="ni")
+#   print(regtest(x=m3.residuals, sei=m3.SEresiduals, ni=model3$ni, model = "lm", predictor="ni"))
+#   
+#   plot(m3.residuals,model3$ni, xlim=c(-300,300))
+# 
+# ## Model 4: PB test using sample size: Two-stage
+#   
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   # Extract residuals and SE from model 4 and then put these directly into regtest
+#   a4 <- rstandard.rma.uni(model4)
+#   m4.residuals <- a4$resid
+#   m4.SEresiduals <- a4$se
+#   
+#   m4 <- regtest(x=m4.residuals, sei=m4.SEresiduals, ni=model4$ni, model = "lm", predictor="ni")
+#   print(regtest(x=m4.residuals, sei=m4.SEresiduals, ni=model4$ni, model = "lm", predictor="ni"))
+#   
+#   plot(m4.residuals, model4$ni, xlim=c(-300,300))
+# 
+# ## Model 5: PB test using inverse sample size: naïve test
+#   
+#   # Extract residuals and SE from model 5 and then put these directly into regtest
+#   a5 <- rstandard.rma.uni(model5)
+#   m5.residuals <- a5$resid
+#   m5.SEresiduals <- a5$se
+#   
+#   # Funnel asymmetry test 
+#   m5 <- regtest(x=m5.residuals, sei=m5.SEresiduals, ni=model5$ni, model = "lm", predictor="ninv")
+#   print(regtest(x=m5.residuals, sei=m5.SEresiduals, ni=model5$ni, model = "lm", predictor="ninv"))
+#   
+#   plot(m5.residuals,1/model5$ni, xlim=c(-300,300))
+# 
+# ## Model 6: PB test using inverse sample size: Two-stage
+#   
+#   # Regression test on the residuals - i.e. having removed the effect of baseline risk from the treatment effect
+#   # Extract residuals and SE from model 6 and then put these directly into regtest
+#   a6 <- rstandard.rma.uni(model6)
+#   m6.residuals <- a6$resid
+#   m6.SEresiduals <- a6$se
+#   
+#   m6 <- regtest(x=m6.residuals, sei=m6.SEresiduals, ni=model6$ni, model = "lm", predictor="ninv")
+#   print(regtest(x=m6.residuals, sei=m6.SEresiduals, ni=model6$ni, model = "lm", predictor="ninv"))
+#   
+#   plot(m6.residuals, 1/model6$ni, xlim=c(-300,300))
+
+```
+
+
+## Regression
+
+``` {r}
+
+# predictions for low risk trials
+
+preds<-predict(randomTBL, newmods = cbind(seq(from = 0, to = 1200, by =1)), addx = TRUE)
+
+# combine orthopaedics TBL data (high risk trials) with low risk trials
+
+#(Added by Tom) Drop columns that we don't need and which prevent the two datasets being combined
+TBLData2 <- TBLData[, names(OrthoTBLData)]
+
+# names(OrthoTBLData) <- names(TBLData)             Commented out by Tom
+TBLDataFull <- rbind(TBLData2, OrthoTBLData)
+TBLDataFull$MD <- as.numeric(TBLDataFull$MD)
+TBLDataFull$seMD <- as.numeric(TBLDataFull$seMD)
+
+TBLDataFull <- TBLDataFull[!is.na(TBLDataFull$MD),]
+
+# second model with just high risk trials
+
+randomTBL2<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, mods = ~ Mean.1, measure="MD", data=TBLDataFull[c(56:84),])
+
+preds2 <- predict(randomTBL2, newmods = cbind(seq(from = 0, to = 2500, by =1)), addx = TRUE)
+
+
+TBLDataFull$wi <- 1/TBLDataFull$seMD
+
+Ortho <- c(rep(1,55),rep(2,39)) # for symbols
+
+size <- 0.5 + 3 * (TBLDataFull$wi - min(TBLDataFull$wi, na.rm=TRUE))/(max(TBLDataFull$wi, na.rm=TRUE) - min(TBLDataFull$wi, na.rm=TRUE)) # for sizing of points
+
+
+## Regression plot
+
+randomTBL
+randomTBL2
+
+randomTBLFull<-rma(m1i = Mean.2, m2i = Mean.1, sd1i = SD.2, sd2i = SD.1, n1i = N.2, n2i = N.1, mods = ~ Mean.1, measure="MD", data=TBLDataFull)
+
+preds3 <- predict(randomTBLFull, newmods = cbind(seq(from = 0, to = 2500, by =1)), addx = TRUE)
+
+plot(TBLDataFull$Mean.1, TBLDataFull$MD, pch = Ortho, cex = size, col=c(rep("black",55),rep("blue",39)),
+     xlab = "Blood Loss in Control Arm (ml)", ylab = "TXA Blood Loss - Control Blood Loss (ml)",
+     las = 1, bty = "l", main = "Regression of Difference in Blood Loss between \n Trial arms and Blood Loss in the Control Arm ", ylim = c(-1000,300))
+#lines(0:1200, preds$pred)
+#lines(0:1200, preds$ci.lb, lty = "dashed")
+#lines(0:1200, preds$ci.ub, lty = "dashed")
+#lines(0:2500, preds2$pred, col="blue")
+#lines(0:2500, preds2$ci.lb, lty = "dashed", col="blue")
+#lines(0:2500, preds2$ci.ub, lty = "dashed", col="blue")
+lines(0:2500, preds3$pred, col="red")
+abline(h = 1, lty = "dotted")
+
+legend("topright", legend = c("Low risk trials", "High risk trials", "Overall regression line"),
+       col = c("black", "blue", "red"),
+       pch = c(1,2,NA),
+       lty = c(NA,NA,1))
+```
+
+# Redo meta-regression in JAGS to account for shared error in baseline risk
+
+``` {r}
+library(R2jags)
+
+df <- TBLDataFull
+
+# excluding missing values
+ df <- df[!is.na(df$SD.1) & !is.na(df$SD.2), ]
+
+# Impute SDs using coefficient of variation from trials with data
+# cv1 <- with(df, sum(SD.1, na.rm = TRUE) / sum(Mean.1[!is.na(SD.1)]))
+# cv2 <- with(df, sum(SD.2,   na.rm = TRUE) / sum(Mean.2[!is.na(SD.2)]))
+# 
+# df$SD.1[is.na(df$SD.1)] <- cv1 * df$Mean.1[is.na(df$SD.1)]
+# df$SD.2[is.na(df$SD.2)]     <- cv2 * df$Mean.2[is.na(df$SD.2)]
+
+dat <- list(
+  ns    = nrow(df),
+  mean1 = df$Mean.1,
+  mean2 = df$Mean.2,
+  sd1   = df$SD.1,
+  sd2   = df$SD.2,
+  n1    = df$N.1,
+  n2    = df$N.2,
+  mx    = mean(df$Mean.1)      # centering value
+)
+
+inits <- function() list(
+  d = 0, beta = 0, m = mean(df$Mean.1), sdmu = sd(df$Mean.1),
+  U = 1, V = 1,
+  mu = df$Mean.1
+)
+
+fit <- jags(
+  data = dat, inits = inits,
+  parameters.to.save = c("d", "beta", "sigma", "prop0", "m", "sdmu", "mu"),
+  model.file = "md_RE_BR_model.txt",
+  n.chains = 3, n.iter = 50000, n.burnin = 10000, n.thin = 5
+)
+
+print(fit)                       # check Rhat < 1.05 and decent n.eff
+traceplot(fit, varname = c("d", "beta", "sigma"))
+
+
+sims  <- fit$BUGSoutput$sims.list
+beta  <- sims$beta         
+d     <- sims$d
+mx    <- mean(df$Mean.1)
+
+quantile(beta, c(0.025, 0.5, 0.975))
+
+# 2. Line and 95% credible band over a grid of baseline values
+xgrid <- seq(min(df$Mean.1), max(df$Mean.1), length.out = 100)
+
+eff      <- sapply(xgrid, function(x) d + beta * (x - mx))   # treatment - control
+eff_med  <- apply(eff, 2, median)
+eff_low  <- apply(eff, 2, quantile, 0.025)
+eff_high <- apply(eff, 2, quantile, 0.975)
+
+plot(TBLDataFull$Mean.1, TBLDataFull$MD, pch = Ortho, cex = size, col=c(rep("black",55),rep("blue",39)),
+     xlab = "Blood Loss in Control Arm (ml)", ylab = "TXA Blood Loss - Control Blood Loss (ml)",
+     las = 1, bty = "l", main = "Regression of Difference in Blood Loss between \n Trial arms and Blood Loss in the Control Arm ", ylim = c(-1000,300))
+#lines(0:1200, preds$pred)
+#lines(0:1200, preds$ci.lb, lty = "dashed")
+#lines(0:1200, preds$ci.ub, lty = "dashed")
+#lines(0:2500, preds2$pred, col="blue")
+#lines(0:2500, preds2$ci.lb, lty = "dashed", col="blue")
+#lines(0:2500, preds2$ci.ub, lty = "dashed", col="blue")
+lines(xgrid, eff_med, col = "red", lwd = 2)
+abline(h = 1, lty = "dotted")
+
+legend("topright", legend = c("Low risk trials", "High risk trials", "Overall regression line"),
+       col = c("black", "blue", "red"),
+       pch = c(1,2,NA),
+       lty = c(NA,NA,1))
+```
+
+
+``` {r}
+# Probability of transfusion in control arm vs amount of blood loss in control arm
+
+# black circles = control arm
+# blue triangles = treatment arm
+
+TransData$probTransControl <- TransData$R.1/TransData$N.1
+TransData$probTransTreat <- TransData$R.2/TransData$N.2
+
+plot(TransData$covar.pTBL, TransData$probTransControl, 
+     xlim = c(0, 1200), 
+     xlab = "Average Blood Loss in Arm", 
+     ylab = "Probability of Transfusion in Arm",
+     main = "Probability of Transfusion vs. Blood Loss in Control and Treatment Arms",
+     pch = 1, col = "black", cex = 1.2)  # Black circles for control arm
+
+points(TransData$covar.tTBL, TransData$probTransTreat, 
+       pch = 2, col = "blue", cex = 1.2)  # Blue triangles for treatment arm
+
+# Add a legend to distinguish between control and treatment groups
+legend("topright", legend = c("Control Arm", "Treatment Arm"), 
+       pch = c(1, 2), col = c("black", "blue"), bty = "n")
+
+
+# Plotting Random Effects model with no covariates 
+labbe(randomTransNoCov, transf = exp)
+
+```
+
+
+# Length of Stay 
+
+
+## Forest Plot 
+
+Hamedani_2021 removed because it has NA for SD 
+
+```{r LoS}
+
+# Subset data so we only have length of stay information, pick relevant columns, remove any data w/ missing info
+LosData_subset <- subset(LowRiskAllOutcomes, !is.na(los.mean1))
+LosData_subset <- LosData_subset[,c("X", "Study", "covar.Surg", "covar.Route","T.1", "los.mean1", "los.sd1", "los.n1", "T.2","los.mean2", "los.sd2", "los.n2")]
+LosData_subset <- subset(LosData_subset, !is.na(los.sd1) # hamedani_2021 removed because has NA for SD
+                         & los.sd1 != 0.1 # comment for sensitivity analysis
+)
+LosData_subset <- LosData_subset[LosData_subset$Study != "Pacheco_2023", ]
+
+# Mean Difference and standard error 
+LosData_subset$MD <- LosData_subset$los.mean2 - LosData_subset$los.mean1
+LosData_subset$seMD <- sqrt((LosData_subset$los.sd1^2)/LosData_subset$los.n1 + (LosData_subset$los.sd2^2)/LosData_subset$los.n2)
+
+LosData_subset <- LosData_subset[-1,]
+
+# fixed and random effects models
+fixedLOS_subset<- rma(yi=MD, sei=seMD, data=LosData_subset, method='FE')
+fixedLOS_subset
+
+randomLOS_subset<-rma(yi=MD, sei=seMD, data=LosData_subset)
+randomLOS_subset
+
+
+# Prepare data to round SD values for better display
+LosData_subset$los.sd1 <- round(LosData_subset$los.sd1, 2)
+LosData_subset$los.sd2 <- round(LosData_subset$los.sd2, 2)
+
+# Forest plot
+forest(randomLOS_subset, 
+       slab = paste(LosData_subset$Study),                                        # Study IDs
+       xlim = c(-25, 9),                                                   # Adjust x-axis limits
+       ylim = c(-3,max(as.numeric(fixedLOS_subset$slab)) + 3),
+       ilab = cbind(LosData_subset$los.mean2, LosData_subset$los.sd2, LosData_subset$los.n2, 
+                    LosData_subset$los.mean1, LosData_subset$los.sd1, LosData_subset$los.n1),  # Add Mean, SD, N for each group
+       ilab.xpos = seq(-16, -5, length.out = 6),                          # Position for additional columns of data (mean, sd, n)
+       cex = 0.75,                                                        # Font size for labels
+       header = FALSE,
+       addfit = FALSE,
+       order = order(LosData_subset$X),                                          # Order by Study ID
+       main = "Forest Plot of Length of Stay Meta-Analysis" 
+)
+
+# Add headers for the table columns
+text(seq(-16, -5, length.out = 6), 
+     max(as.numeric(fixedLOS_subset$slab)) + 1.5,                                  # Position headers above the plot
+     c("Mean", "SD", "N", "Mean", "SD", "N"), 
+     cex = 0.75)
+
+# Add headers for treatment and control columns
+text(seq(-16, -5, length.out = 6)[c(2, 5)], 
+     max(as.numeric(fixedLOS_subset$slab)) + 2.5,                                  # Position headers above the plot
+     c("TXA", "Placebo"), 
+     cex = 0.75)
+
+# Add Study ID and Mean Difference headers
+text(-25, max(as.numeric(fixedLOS_subset$slab)) + 1.5, "Study ID", pos = 4, cex = 0.75)
+text(9, max(as.numeric(fixedLOS_subset$slab)) + 1.5, "Mean Difference [95% CI]", pos = 2, cex = 0.75)
+
+# Add fixed and random effects estimate
+abline(h=0)
+addpoly.rma(fixedLOS_subset, row=-2, mlab = "FE Model", addpred=TRUE)
+addpoly.rma(randomLOS_subset, row=-1, mlab = "RE Model", addpred=TRUE)
+```
+
+
+## Funnel Plot 
+
+``` {r}
+
+
+# SurgeryCode
+
+SurgCode <- LosData_subset$covar.Surg
+SurgCode[SurgCode == "Otolaryngology (ENT)"] = 4
+SurgCode[SurgCode == "Gynecology"] = 3
+SurgCode[SurgCode == "Orthopaedics"] = 1
+SurgCode[SurgCode == "Urology"] = 2
+SurgCode <- as.numeric(SurgCode)
+
+# Funnel plot
+
+FunnelLOS <- funnel(randomLOS_subset, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = SurgCode,
+                     main = "Funnel Plot: Length of Stay Meta-Analysis \n (by Surgery Type)", xlab = "Mean Difference (days)")
+legend("topright", legend = unique(LosData_subset$covar.Surg), pch = seq(1,4))
+
+
+# Route of administration code
+
+RouteCode <- LosData_subset$covar.Route
+RouteCode[RouteCode == "Combined"] = 5
+RouteCode[RouteCode == "Intramuscular"] = 4
+RouteCode[RouteCode == "Oral"] = 3
+RouteCode[RouteCode == "Topical/Intra-articular"] = 2
+RouteCode[RouteCode == "Intravenous"] = 1
+RouteCode <- as.numeric(RouteCode)
+
+FunnelTBL <- funnel(randomLOS_subset, level=c(90, 95, 99), refline=0, shade=c("white", "gray55", "gray75"), pch = RouteCode,
+                    main = "Funnel Plot: Length of Stay Meta-Analysis \n (by Route of Administration)", xlab = "Mean Difference (days)")
+legend("topright", legend = unique(LosData_subset$covar.Route), pch = seq(1,5))
+
+
+```
+
+```{r By Surgery Type, fig.height = 10, fig.width = 8}
+# Create space for legend so change plot size 
+# par(mar = c(5, 4, 4, 12) + 0.5) 
+
+# Create different shapes for each surgery type 
+surgery_shapes <- as.numeric(factor(LosData_subset$covar.Surg))
+surgery_pch <- c(3, 4, 5, 6, 1, 2)  # symbols
+pch_values <- surgery_pch[surgery_shapes]
+surgery_types <- unique(LosData_subset$covar.Surg) # for legend later
+
+# Plot the funnel plot 
+funnel(
+  randomLOS_subset,                       
+  main = "Funnel Plot of Length of Stay Meta-Analysis",  
+  xlab = "Mean Difference (MD)",   # X-axis label
+  ylab = "Standard Error (SE)",    # Y-axis label
+  xlim = c(-2, 2),
+  ylim = c(0, 0.4),
+  pch = pch_values,                # Use the custom plotting characters for each surgery type
+  level=c(90, 95, 99),             # Create 90%, 95% and 99% shaded areas around triangle 
+  refline=0, 
+  shade=c("white", "gray55", "gray75")
+)
+
+# Add the legend to the plot
+legend(x = 0.8, y = 0,                               # Position of the legend
+       legend = surgery_types,                      # Surgery type labels
+       pch = surgery_pch[1:length(surgery_types)],  # Corresponding shapes for each type
+       title = "Surgery Type",
+       inset = c(-0.6, 0),                          # move the legend outside of plot so we can see area 
+       xpd = TRUE                                   # allows legend to go outside of plot area 
+)
+```
+
+```{r By Route of Adminstration Type}
+# Create space for legend so change plot size 
+# par(mar = c(5, 4, 4, 12) + 0.5) 
+
+# Create different shapes for each surgery type 
+Route_shapes <- as.numeric(factor(LosData_subset$covar.Route))
+Route_pch <- c(3, 4, 5, 6, 1, 2)  # symbols
+pch_values <- surgery_pch[Route_shapes]
+Route_types <- unique(LosData_subset$covar.Route) # for legend later
+
+# Plot the funnel plot 
+funnel(
+  randomLOS_subset,                       
+  main = "Funnel Plot of Length of Stay Meta-Analysis",  
+  xlab = "Mean Difference (MD)",   # X-axis label
+  ylab = "Standard Error (SE)",    # Y-axis label
+  xlim = c(-2, 2),
+  ylim = c(0, 0.4),
+  pch = pch_values,                # Use the custom plotting characters for each surgery type
+  level=c(90, 95, 99),             # Create 90%, 95% and 99% shaded areas around triangle 
+  refline=0, 
+  shade=c("white", "gray55", "gray75")
+)
+
+# Add the legend to the plot
+legend(x = 0.8, y = 0,                                  # Position of the legend
+       legend = Route_types,                      # Surgery type labels
+       pch = Route_pch[1:length(Route_types)],  # Corresponding shapes for each type
+       title = "Route of Adminstration",
+       inset = c(-0.6, 0),                          # move the legend outside of plot so we can see area 
+       xpd = TRUE                                   # allows legend to go outside of plot area 
+)
+```
+
+## Regression 
+
+```{r}
+library(ggplot2)
+
+# Calculate study weights for point size
+LosData_subset$wi <- 1 / (LosData_subset$seMD^2)
+LosData_subset$size <- 0.5 + 3 * (LosData_subset$wi - min(LosData_subset$wi, na.rm = TRUE)) / (max(LosData_subset$wi, na.rm = TRUE) - min(LosData_subset$wi, na.rm = TRUE))
+
+# Create the plot using ggplot2
+ggplot(LosData_subset, aes(x = los.mean1, y = MD, color = covar.Surg, shape = covar.Surg, size = size)) +
+  geom_point() +  # Add points
+  #geom_smooth(method = "lm", se = FALSE) +  # Add regression line
+  labs(title = "Regression of Difference in Length of Stay by Type of Surgery",
+       x = "Mean LOS in Control Group (days)",
+       y = "Mean Difference in LOS (TXA - Control)") +
+  theme_minimal() +  # Use a minimal theme for cleaner appearance
+  scale_color_manual(values = c("red", "blue", "green", "purple", "orange", "brown")) +  # Custom colors
+  scale_shape_manual(values = c(3, 4, 5, 6, 1, 2)) +  # Custom shapes
+  guides(size = "none") +   # Remove size legend  
+  labs(color = "Surgery Type", shape = "Surgery Type")
+  # + facet_grid(~covar.Surg)
+```
+
+
+# Thrombosis
+
+## Forest Plot 
+
+```{r}
+# Contunuity Correction 
+#Row index for trials with outcomes of 0 in either arm
+zero_index <- which(ThrombData$R.1 == 0 | ThrombData$R.2 == 0)
+#Display the trials to add a continuity correction to
+ThrombData$Study[zero_index]
+#Add 0.5 to numerator and denominator in both arms
+ThrombData$R.1[zero_index] <- ThrombData$R.1[zero_index] + 0.5
+ThrombData$R.2[zero_index] <- ThrombData$R.2[zero_index] + 0.5
+ThrombData$N.1[zero_index] <- ThrombData$N.1[zero_index] + 0.5
+ThrombData$N.2[zero_index] <- ThrombData$N.2[zero_index] + 0.5
+
+# Calculate the log odds ratio (logor)
+ThrombData$logor = log( (ThrombData$R.2 / (ThrombData$N.2 - ThrombData$R.2)) / (ThrombData$R.1 / (ThrombData$N.1 - ThrombData$R.1)) )
+
+# Calculate the standard error of the log odds ratio (selogor)
+ThrombData$selogor = sqrt((1 / ThrombData$R.1) + 
+                          (1 / (ThrombData$N.1 - ThrombData$R.1)) + 
+                          (1 / ThrombData$R.2) + 
+                          (1 / (ThrombData$N.2 - ThrombData$R.2)))
+
+
+# calculate 2x2 cell data
+ThrombData$a = ThrombData$R.2
+ThrombData$b = ThrombData$N.2 - ThrombData$R.2
+ThrombData$c = ThrombData$R.1
+ThrombData$d = ThrombData$N.1 - ThrombData$R.1
+
+# Fixed and random effects 
+fixedThrom <- rma(ai=a, bi=b, ci=c, di=d, measure="OR", method="FE", data=ThrombData)
+randomThrom <- rma(ai=a, bi=b, ci=c, di=d, measure="OR", method = "REML", data=ThrombData)
+
+ThrombData2 <- ThrombData
+ThrombData2$R.1[c(2,3)] <- ThrombData$R.1[c(2,3)] - 0.5
+ThrombData2$R.2[c(2,3)] <- ThrombData$R.2[c(2,3)] - 0.5
+
+# Forest plot
+forest(randomThrom, 
+       slab = paste(ThrombData$Study),
+       xlim = c(-27, 10), 
+       at = log(c(0.01, 0.25, 1, 10)), 
+       atransf = exp, 
+       ilab = cbind(ThrombData2$R.2, ThrombData2$b, ThrombData2$R.1, ThrombData2$d), 
+       ilab.xpos = c(-19, -15, -11, -7), 
+       cex=0.7,
+       header = FALSE,
+       addpred=TRUE,
+       main = "Forest Plot of Deep Vein Thrombosis Meta-Analysis")
+text(c(-19, -15, -11, -7), 4.5, c("Thrombosis", "No Thrombosis", "Thrombosis", "No Thrombosis"), cex = 0.75)
+text(c(-17, -9), 5, c("TXA", "Placebo"), cex = 0.75)
+text(-27, 4.5, "Study ID", pos = 4, cex = 0.75)
+text(10, 4.5, "Odds Ratio [95% CI]", pos = 2, cex = 0.75)
+addpoly(fixedThrom, row = -0.5, cex = 0.75, atransf = exp, addpred=TRUE)
+
+
+```
+
+## Funnel Plot 
+
+```{r}
+funnel(
+  randomThrom,                       
+  main = "Funnel Plot of Thrombosis Meta-Analysis",  
+  xlab = "Log Odds Ratio",   # X-axis label
+  ylab = "Standard Error (SE)",    # Y-axis label
+  level=c(90, 95, 99),             # Create 90%, 95% and 99% shaded areas around triangle 
+  refline=0, 
+  shade=c("white", "gray55", "gray75"),
+  ylim = c(0, 1.6)
+)
+
+```
+
+
+
+```{r Remove Everything from R Environment}
+rm(list = ls())
+```
+
+
+# Pain
+
+## Data Set-up
+```{r Read in Data and Manipulate, message=FALSE}
+# Load in the data 
+library(readxl)
+library(metafor)
+library(ggplot2)
+
+pain <- read_excel("pain.xlsx")
+
+# Extract Data of Study that needs two TXA groups combining  
+N1 <- pain$TXA_n_01[pain$Study == "Ma 2021"]
+N2 <- pain$TXA_n_02[pain$Study == "Ma 2021"]
+Mean1 <- pain$TXA_mean_01[pain$Study == "Ma 2021"]
+Mean2 <- pain$TXA_mean_02[pain$Study == "Ma 2021"]
+SD1 <- pain$TXA_sd_01[pain$Study == "Ma 2021"]
+SD2 <- pain$TXA_sd_02[pain$Study == "Ma 2021"]
+
+# Overwrite the TXA arm column with new, combined data for... 
+# Mean 
+pain$TXA_mean_01[pain$Study == "Ma 2021"] <- ((N1 * Mean1) + (N2 * Mean2)) / 
+  (N1 + N2)
+
+# SD 
+pain$TXA_sd_01[pain$Study == "Ma 2021"] <- sqrt( 
+  (N1 - 1)*(SD1)^2 + (N2 - 1)*(SD2)^2 + ((N1 * N2) / (N1 + N2)) * 
+    ((Mean1)^2 + (Mean2)^2 - (2 * Mean1 * Mean2)))  / (N1 + N2 - 1)
+
+# Sample size 
+pain$TXA_n_01[pain$Study == "Ma 2021"] <- N1 + N2
+
+# Remove third Arm and clear R enviroment 
+pain$TXA_mean_02 <- pain$TXA_sd_02 <- pain$TXA_n_02 <- NULL
+rm(Mean1, Mean2, N1, N2, SD1, SD2)
+
+# Mean Difference = TXA - Control, and Se of Mean Difference
+pain$MD <- pain$TXA_mean_01 - pain$Control_mean
+pain$seMD <- sqrt((pain$Control_sd^2)/pain$Control_n + (pain$TXA_sd_01^2)/pain$TXA_n_01)
+
+# Prepare data to round SD values for better display
+pain$Control_sd <- round(pain$Control_sd, 2)
+pain$TXA_sd_01 <- round(pain$TXA_sd_01, 2)
+
+# Calculate study weights for point size (used later for regression plot)
+pain$wi <- 1 / (pain$seMD^2)
+pain$size <- 0.5 + 3 * (pain$wi - min(pain$wi, na.rm = TRUE)) / (max(pain$wi, na.rm = TRUE) - min(pain$wi, na.rm = TRUE))
+
+# Subset the data at each time point 
+pain1to3 <- subset(pain, Post_op_day == "Day 1-3")
+pain1to3
+painw1 <- subset(pain, Post_op_day == "Week 1")
+painw1
+painw2 <- subset(pain, Post_op_day == "Week 2")
+painw2
+painw3to6 <- subset(pain, Post_op_day == "Week 3-6")
+painw3to6
+
+```
+
+## Forest Plot 
+
+```{r Meta-Analysis}
+## ------- Fixed Effects Model ----------- # 
+# Day 1 to 3
+fixed1to3<- rma(yi=MD, sei=seMD, data=pain1to3, method='FE')
+fixed1to3
+
+# Week 1
+fixedw1<- rma(yi=MD, sei=seMD, data=painw1, method='FE')
+fixedw1
+
+# Week 2
+fixedw2<- rma(yi=MD, sei=seMD, data=painw2, method='FE')
+fixedw2
+
+# Week 3 to 6
+fixedw3to6<- rma(yi=MD, sei=seMD, data=painw3to6, method='FE')
+fixedw3to6
+
+## ------- Random Effects Model ----------- # 
+# Day 1 to 3
+random1to3<-rma(yi=MD, sei=seMD, data=pain1to3)
+random1to3
+
+# Week 1
+randomw1<-rma(yi=MD, sei=seMD, data=painw1)
+randomw1
+
+# Week 2
+randomw2<-rma(yi=MD, sei=seMD, data=painw2)
+randomw2
+
+# Week 3 to 6
+randomw3to6<-rma(yi=MD, sei=seMD, data=painw3to6)
+randomw3to6
+```
+
+```{r Forest Plot}
+
+create_forest_plot <- function(random_model, fixed_model, pain_data, xlim, ylim, cex, main_title) {
+  
+  # Generate the forest plot
+  forest(random_model, 
+         slab = paste(pain_data$Study),       
+         xlim = xlim,                     
+         ylim = ylim,
+         addpred=TRUE,
+         header = FALSE,
+         ilab = cbind(pain_data$TXA_mean_01, 
+                      pain_data$TXA_sd_01, 
+                      pain_data$TXA_n_01,  
+                      pain_data$Control_mean, 
+                      pain_data$Control_sd, 
+                      pain_data$Control_n), # Add Mean, SD, N for each group
+         ilab.xpos = seq(-16, -6, length.out = 6), 
+         cex = cex,                                                         
+         main = main_title                                                  
+  )
+  
+  # Add headers for the table columns
+  text(seq(-16, -6, length.out = 6), 
+       max(as.numeric(fixed_model$slab)) + 1.5,                              
+       # Position headers above the plot
+       c("Mean", "SD", "N", "Mean", "SD", "N"), 
+       cex = cex)
+  
+  # Add headers for treatment and control columns
+  text(seq(-16, -6, length.out = 6)[c(2, 5)], 
+       max(as.numeric(fixed_model$slab)) + 2,                              
+       # Position headers above the plot
+       c("TXA", "Placebo"), 
+       cex = cex)
+  
+  # Add Study ID and Mean Difference headers
+  text(-25, max(as.numeric(fixed_model$slab)) + 1.5, "Study ID", pos = 4, cex = cex)
+  text(10, max(as.numeric(fixed_model$slab)) + 1.5, "Mean Difference [95% CI]", pos = 2, cex = cex)
+  
+  # Add fixed effects estimate
+  addpoly.rma(fixed_model, addpred=TRUE)
+}
+
+# Example usage
+create_forest_plot(random1to3, fixed1to3, pain1to3, 
+                   xlim = c(-25, 10), ylim = c(-3, 17), cex = 0.8, 
+                   main_title = "Forest Plot: VAS Scores (Post-op Day 1 to 3)")
+
+create_forest_plot(randomw1, fixedw1, painw1, 
+                   xlim = c(-25, 10), ylim = c(-3, 12), cex = 0.8, 
+                   main_title = "Forest Plot: VAS Scores (Post-op Week 1)")
+
+create_forest_plot(randomw2, fixedw2, painw2, 
+                   xlim = c(-25, 10), ylim = c(-3, 9), cex = 0.8, 
+                   main_title = "Forest Plot: VAS Scores (Post-op Week 2)")
+
+create_forest_plot(randomw3to6, fixedw3to6, painw3to6, 
+                   xlim = c(-25, 10), ylim = c(-3, 13), cex = 0.8, 
+                   main_title = "Forest Plot: VAS Scores (Post-op Week 3 to 6)")
+```
+
+## Funnel Plot 
+```{r Funnel Plot at each time point}
+# Plot the funnel plot 
+create_funnel_plots <- function(model, xlim, ylim, main) {
+  funnel(
+  model,                       
+  main = main,  
+  xlab = "Mean Difference (MD)",   # X-axis label
+  ylab = "Standard Error (SE)",    # Y-axis label
+  xlim = xlim,
+  ylim = ylim,
+  level=c(90, 95, 99),             # Create 90%, 95% and 99% shaded areas around triangle 
+  refline=0, 
+  shade=c("white", "gray55", "gray75")
+)
+}
+
+create_funnel_plots(random1to3, xlim = c(-4, 4), ylim = c(0, 0.6),
+                    main = "Funnel Plot of VAS Scores Meta-Analysis (Post-op Day 1 to 3)")
+create_funnel_plots(randomw1, xlim = c(-4, 4), ylim = c(0, 0.6),
+                    main = "Funnel Plot of VAS Scores Meta-Analysis (Post-op Week 1)")
+create_funnel_plots(randomw2, xlim = c(-4, 4), ylim = c(0, 0.6),
+                    main = "Funnel Plot of VAS Scores Meta-Analysis (Post-op Week 2)")
+create_funnel_plots(randomw3to6, xlim = c(-4, 4), ylim = c(0, 0.6),
+                    main = "Funnel Plot of VAS Scores Meta-Analysis (Post-op Week 3 to 6)")
+
+```
+
+
+## Regression
+```{r regression plots at each timepoint}
+library(ggplot2)
+
+regression_plots <- function(df, title) {
+  # Create the plot using ggplot2
+ggplot(df, aes(x = TXA_mean_01, y = MD, size = size)) +
+  geom_point() +  # Add points
+  ylim(-5, 1) + 
+  #geom_smooth(method = "lm", se = FALSE) +  # Add regression line
+  labs(title = title,
+       x = "Mean VAS Score in Control Group",
+       y = "Mean Difference in VAS Scores (TXA - Control)") +
+  theme_minimal() + 
+  guides(size = "none") + 
+  facet_grid(~Post_op_day)
+    
+}
+
+regression_plots(pain, 
+                 title = "Regression of Difference in Post-op VAS Scores") # Probably could do with a better title... 
+```
+
+
+
+
+
